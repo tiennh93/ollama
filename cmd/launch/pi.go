@@ -1,4 +1,4 @@
-package config
+package launch
 
 import (
 	"context"
@@ -197,8 +197,15 @@ func createConfig(ctx context.Context, client *api.Client, modelID string) map[s
 		"_launch": true,
 	}
 
+	applyCloudContextFallback := func() {
+		if l, ok := lookupCloudModelLimit(modelID); ok {
+			cfg["contextWindow"] = l.Context
+		}
+	}
+
 	resp, err := client.Show(ctx, &api.ShowRequest{Model: modelID})
 	if err != nil {
+		applyCloudContextFallback()
 		return cfg
 	}
 
@@ -215,13 +222,18 @@ func createConfig(ctx context.Context, client *api.Client, modelID string) map[s
 	}
 
 	// Extract context window from ModelInfo
+	hasContextWindow := false
 	for key, val := range resp.ModelInfo {
 		if strings.HasSuffix(key, ".context_length") {
 			if ctxLen, ok := val.(float64); ok && ctxLen > 0 {
 				cfg["contextWindow"] = int(ctxLen)
+				hasContextWindow = true
 			}
 			break
 		}
+	}
+	if !hasContextWindow {
+		applyCloudContextFallback()
 	}
 
 	return cfg

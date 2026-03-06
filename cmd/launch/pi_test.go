@@ -1,4 +1,4 @@
-package config
+package launch
 
 import (
 	"context"
@@ -795,6 +795,43 @@ func TestCreateConfig(t *testing.T) {
 		}
 		if _, ok := cfg["contextWindow"]; ok {
 			t.Error("contextWindow should not be set when show fails")
+		}
+	})
+
+	t.Run("cloud model falls back to hardcoded context when show fails", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w, `{"error":"model not found"}`)
+		}))
+		defer srv.Close()
+
+		u, _ := url.Parse(srv.URL)
+		client := api.NewClient(u, srv.Client())
+
+		cfg := createConfig(context.Background(), client, "kimi-k2.5:cloud")
+
+		if cfg["contextWindow"] != 262_144 {
+			t.Errorf("contextWindow = %v, want 262144", cfg["contextWindow"])
+		}
+	})
+
+	t.Run("cloud model falls back to hardcoded context when show omits model info", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/api/show" {
+				fmt.Fprintf(w, `{"capabilities":[],"model_info":{}}`)
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer srv.Close()
+
+		u, _ := url.Parse(srv.URL)
+		client := api.NewClient(u, srv.Client())
+
+		cfg := createConfig(context.Background(), client, "glm-5:cloud")
+
+		if cfg["contextWindow"] != 202_752 {
+			t.Errorf("contextWindow = %v, want 202752", cfg["contextWindow"])
 		}
 	})
 
